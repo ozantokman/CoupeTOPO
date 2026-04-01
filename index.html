@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoupeMAP by Ozan TOKMAN</title>
+    <meta name="author" content="Ozan Tokman">
+    <meta name="description" content="CoupeMAP — Générateur de coupes topographiques interactif. Tracez une ligne sur la carte, téléchargez le profil altimétrique et exportez en DXF pour ArchiCAD/REVIT.">
+    <meta property="og:title" content="CoupeMAP — Ozan TOKMAN">
+    <meta property="og:description" content="Générateur de coupes topographiques interactif. Export DXF compatible ArchiCAD.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://coupemap.dev.ozantokman.com">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css" />
+    <script defer src="https://track.ozantokman.com/script.js" data-website-id="fb622b20-c34e-47f1-a406-475c0b4f3462"></script>
+</head>
+<body>
+    <div class="main">
+        <div class="sidebar" role="complementary">
+            <!-- Header / Branding -->
+            <div class="brand-block">
+                <img src="assets/logo.svg" alt="CoupeMAP" class="brand-logo">
+            </div>
+            <div class="divider"></div>
+
+            <!-- Étape 1 — Tracer la ligne -->
+            <div class="step" data-step="1" id="step1">
+                <div class="step-header">
+                    <span class="step-badge">1</span>
+                    <span class="step-title">Tracer la ligne</span>
+                    <span class="step-check"></span>
+                </div>
+                <div class="step-content">
+                    <div class="stack gap-8">
+                        <button class="btn btn-secondary full-width" id="btnDraw" aria-label="Tracer la ligne de coupe sur la carte">
+                            Tracer la ligne de coupe
+                        </button>
+                        <button class="btn btn-secondary full-width is-hidden" id="btnClearLine" aria-label="Effacer la ligne tracée">
+                            Effacer la ligne
+                        </button>
+                    </div>
+                    <div class="coord-display mt-6" id="coordDisplay">Aucune ligne dessinée</div>
+
+                    <details class="step-details">
+                        <summary>Options d'import</summary>
+                        <div class="or-divider">— OU —</div>
+                        <div class="drop-zone" id="dropZone" role="button" aria-label="Importer un fichier GeoJSON par glisser-déposer">
+                            <div class="icon">📁</div>
+                            <p>Glisser un fichier <strong>profil altimétrique.geojson</strong> ici<br>ou cliquer pour sélectionner</p>
+                            <input type="file" id="fileInput" accept=".geojson,.json" aria-label="Sélectionner un fichier GeoJSON">
+                        </div>
+                    </details>
+                </div>
+            </div>
+
+            <!-- Étape 2 — Profil altimétrique -->
+            <div class="step step-locked" data-step="2" id="step2">
+                <div class="step-header">
+                    <span class="step-badge">2</span>
+                    <span class="step-title">Télécharger le profil</span>
+                    <span class="step-check"></span>
+                </div>
+                <div class="step-content">
+                    <details class="step-details">
+                        <summary>Paramètres API</summary>
+                            <div class="control-group">
+                                <label for="sampling">Nombre de points d'échantillonnage</label>
+                                <input type="number" id="sampling" value="200" min="2" max="5000">
+                            </div>
+                            <div class="control-group">
+                                <label for="resource">Resource altimétrique</label>
+                                <select id="resource">
+                                    <option value="ign_rge_alti_wld" selected>RGE ALTI (France)</option>
+                                    <option value="ign_rge_alti_wld_omr">RGE ALTI Outre-Mer</option>
+                                </select>
+                            </div>
+                    </details>
+                    <button class="btn btn-primary full-width mt-8" id="btnFetch" disabled aria-label="Télécharger le profil altimétrique">
+                        Télécharger le profil
+                    </button>
+                </div>
+            </div>
+
+            <!-- Étape 3 — Résultats -->
+            <div class="step is-hidden" data-step="3" id="step3">
+                <div class="step-header">
+                    <span class="step-badge">3</span>
+                    <span class="step-title">Résultats</span>
+                </div>
+                <div class="step-content">
+                    <div class="stats">
+                        <div class="stat-card"><div class="value" id="statDist">—</div><div class="label">Distance (m)</div></div>
+                        <div class="stat-card"><div class="value" id="statMin">—</div><div class="label">Alt. min (m)</div></div>
+                        <div class="stat-card"><div class="value" id="statMax">—</div><div class="label">Alt. max (m)</div></div>
+                        <div class="stat-card"><div class="value" id="statPts">—</div><div class="label">Points</div></div>
+                        <div class="stat-card"><div class="value" id="statUp">—</div><div class="label">D+ (m)</div></div>
+                        <div class="stat-card"><div class="value" id="statDown">—</div><div class="label">D- (m)</div></div>
+                    </div>
+                    <button class="btn btn-success full-width mt-8" id="btnFetchOSM" disabled aria-label="Rechercher bâtiments et arbres via OpenStreetMap">
+                        Rechercher bâtiments & arbres
+                    </button>                    <button class="btn-link mt-6" id="btnSkipOSM" type="button">Passer directement à l'export &rarr;</button>                </div>
+            </div>
+
+            <!-- Étape 4 — Export -->
+            <div class="step is-hidden" data-step="4" id="step4">
+                <div class="step-header">
+                    <span class="step-badge">4</span>
+                    <span class="step-title">Export</span>
+                </div>
+                <div class="step-content">
+                    <details class="step-details" open>
+                        <summary>Paramètres DXF</summary>
+                        <div class="dxf-settings">
+                            <div class="control-group">
+                                <label for="vScale">Exag. verticale</label>
+                                <input type="number" id="vScale" value="2" min="1" max="20" step="0.5">
+                            </div>
+                            <div class="control-group">
+                                <label for="hGrid">Grille H (m)</label>
+                                <input type="number" id="hGrid" value="200" min="10" max="1000">
+                            </div>
+                        </div>
+                        <div class="control-group mt-8">
+                            <label class="inline-check">
+                                <input type="checkbox" id="osmToggle" checked>
+                                Inclure bâtiments & arbres (OSM)
+                            </label>
+                            <label class="subtext">Requête Overpass API le long du profil</label>
+                        </div>
+                        <div class="control-group mt-8">
+                            <label class="inline-check">
+                                <input type="checkbox" id="gridToggle" checked>
+                                Inclure grille & lignes d'aide
+                            </label>
+                        </div>
+                    </details>
+                    <div class="button-row mt-8">
+                        <button class="btn btn-success" id="btnDxf" aria-label="Télécharger le fichier DXF">Télécharger DXF</button>
+                    </div>
+                    <div class="mt-8">
+                        <button class="btn btn-secondary full-width" id="btnCsv" aria-label="Exporter les données en CSV">Exporter CSV</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="divider"></div>
+            <div class="sidebar-footer">
+                <div class="footer-credits">
+                    Développé par <strong>Ozan Tokman</strong><br>
+                    <a href="https://ozantokman.com" target="_blank" rel="noopener">ozantokman.com</a> ·
+                    <a href="https://brouskdesign.fr" target="_blank" rel="noopener">brouskdesign.fr</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="content" role="main">
+            <div id="map">
+                <div class="draw-mode-banner" id="drawBanner"></div>
+            </div>
+            <div class="chart-container is-hidden" id="chartContainer">
+                <button class="chart-toggle" id="chartToggle" aria-label="Réduire ou agrandir le graphique">▼</button>
+                <canvas id="profileChart"></canvas>
+                <div class="chart-placeholder" id="chartPlaceholder">Le profil altimétrique s'affichera ici</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile notice -->
+    <div class="mobile-notice" id="mobileNotice">
+        <div class="mobile-notice-card">
+            <div class="mobile-notice-icon">🖥️</div>
+            <h2>Application desktop</h2>
+            <p>CoupeMAP est conçu pour être utilisé sur un ordinateur avec une souris.<br>Le tracé de lignes et l'export DXF nécessitent un écran large.</p>
+            <button class="btn btn-primary" id="btnDismissMobile">Continuer quand même</button>
+        </div>
+    </div>
+
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <div class="loading-text">Chargement du profil altimétrique...</div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
